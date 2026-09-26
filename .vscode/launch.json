@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "F5 • Marketing OS local",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm run debug"
+    },
+    {
+      "name": "Anexar ao Worker (API)",
+      "type": "pwa-chrome",
+      "request": "attach",
+      "port": 9229,
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Depurar interface no Chrome",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:8787",
+      "webRoot": "${workspaceFolder}/src/client"
+    }
+  ]
+}
