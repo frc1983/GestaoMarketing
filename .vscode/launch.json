@@ -5,18 +5,18 @@
       "name": "F5 • Marketing OS local",
       "type": "node-terminal",
       "request": "launch",
-      "command": "node scripts/debug.mjs"
+      "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\scripts\\debug.ps1\""
     },
     {
       "name": "Anexar ao Worker (API)",
-      "type": "pwa-chrome",
+      "type": "pwa-msedge",
       "request": "attach",
       "port": 9229,
       "webRoot": "${workspaceFolder}"
     },
     {
-      "name": "Depurar interface no Chrome",
-      "type": "pwa-chrome",
+      "name": "Depurar interface no Edge",
+      "type": "pwa-msedge",
       "request": "launch",
       "url": "http://127.0.0.1:8787",
       "webRoot": "${workspaceFolder}/src/client"
