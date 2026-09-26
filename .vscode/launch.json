@@ -5,7 +5,7 @@
       "name": "F5 • Marketing OS local",
       "type": "node-terminal",
       "request": "launch",
-      "command": "pnpm run debug"
+      "command": "node scripts/debug.mjs"
     },
     {
       "name": "Anexar ao Worker (API)",

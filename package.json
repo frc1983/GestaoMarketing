@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "debug": "pnpm run build && wrangler dev --local --port 8787 --inspector-port 9229 --var APP_ENV:local --var DEV_AUTH_BYPASS:true",
+    "debug": "node scripts/debug.mjs",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
