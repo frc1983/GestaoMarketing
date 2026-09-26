@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { insertRecordStatement, toRecord, type RecordRow } from './db';
 import type { Env } from './env';
 import type { RecordKind, MarketingRecord } from '../shared/types';
-import { EVENT_STATUSES, PROJECT_STATUSES, ROI_STATUSES, TASK_STATUSES } from '../shared/types';
+import { TASK_STATUSES } from '../shared/types';
 
 type Bindings = { Bindings: Env; Variables: { csrfToken: string } };
 export const syncApi = new Hono<Bindings>();
@@ -190,10 +190,7 @@ syncApi.post('/sync/retry', async c => {
   return c.json({ data: { queued: true } });
 });
 
-const importStatuses: Record<RecordKind, readonly string[]> = {
-  task: TASK_STATUSES, project: PROJECT_STATUSES, event: EVENT_STATUSES,
-  roi: ROI_STATUSES, stock_item: ['Ativo', 'Inativo'],
-};
+const importStatuses = { task: TASK_STATUSES } as const;
 interface NotionPage {
   id: string;
   properties: Record<string, { type: string; title?: Array<{ plain_text?: string }>; status?: { name?: string }; select?: { name?: string }; date?: { start?: string }; rich_text?: Array<{ plain_text?: string }> }>;
@@ -211,8 +208,8 @@ function pageValue(page: NotionPage, property: string): string | null {
 }
 
 syncApi.get('/import/notion/preview', async c => {
-  const kind = c.req.query('kind') as RecordKind;
-  if (!importStatuses[kind]) return c.json({ error: 'Módulo inválido' }, 400);
+  const kind = c.req.query('kind');
+  if (kind !== 'task') return c.json({ error: 'A importação do Notion está disponível somente para Tarefas' }, 400);
   const sourceId = await sourceIdFor(c.env, kind);
   if (!c.env.NOTION_TOKEN || !sourceId) return c.json({ error: 'Integração Notion não configurada' }, 503);
   const fields = await sourceProperties(c.env, sourceId);
@@ -226,9 +223,9 @@ syncApi.get('/import/notion/preview', async c => {
 });
 
 syncApi.post('/import/notion/confirm', async c => {
-  const body = await c.req.json().catch(() => null) as { kind?: RecordKind; pageIds?: string[] } | null;
-  if (!body?.kind || !importStatuses[body.kind] || !Array.isArray(body.pageIds) || body.pageIds.length > 50)
-    return c.json({ error: 'Seleção inválida' }, 400);
+  const body = await c.req.json().catch(() => null) as { kind?: string; pageIds?: string[] } | null;
+  if (body?.kind !== 'task' || !Array.isArray(body.pageIds) || body.pageIds.length > 50)
+    return c.json({ error: 'A importação do Notion está disponível somente para Tarefas' }, 400);
   const sourceId = await sourceIdFor(c.env, body.kind);
   if (!c.env.NOTION_TOKEN || !sourceId) return c.json({ error: 'Integração Notion não configurada' }, 503);
   const fields = await sourceProperties(c.env, sourceId);
@@ -243,7 +240,7 @@ syncApi.post('/import/notion/confirm', async c => {
     const title = pageValue(page, fields.title)?.trim();
     if (!title) return c.json({ error: `Página ${pageId} sem título` }, 400);
     const rawStatus = pageValue(page, 'Status');
-    const status = rawStatus && importStatuses[body.kind].includes(rawStatus) ? rawStatus : importStatuses[body.kind][0];
+    const status = rawStatus && (importStatuses.task as readonly string[]).includes(rawStatus) ? rawStatus : importStatuses.task[0];
     const now = new Date().toISOString();
     const record: MarketingRecord = { id: crypto.randomUUID(), kind: body.kind, title, status,
       dueAt: pageValue(page, 'Prazo'), eventAt: pageValue(page, 'Data'),

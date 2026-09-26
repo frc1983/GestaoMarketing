@@ -51,7 +51,7 @@ pnpm run db:migrate:remote
 pnpm run deploy
 ```
 
-Na tela **Configurações**, informe os `data_source_id` das bases compartilhadas com a integração do Notion. O sistema cria a propriedade `Marketing OS ID` nessas bases para impedir páginas duplicadas. Depois da importação inicial seletiva, a sincronização ocorre apenas do Marketing OS para o Notion.
+Na tela **Configurações**, informe os `data_source_id` das bases compartilhadas com a integração do Notion. O sistema cria a propriedade `Marketing OS ID` nessas bases para impedir páginas duplicadas. A importação inicial do Notion é permitida somente para **Tarefas**. Projetos, Eventos, ROI e Estoque são criados e mantidos no Marketing OS, com sincronização somente de saída para o Notion.
 
 ## Estoque
 
