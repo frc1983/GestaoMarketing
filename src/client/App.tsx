@@ -44,7 +44,7 @@ function StatusGroup({ title, statuses, counts, navigate }: { title: string; sta
   const id = title === 'Tarefas' ? 'tasks' : title === 'Projetos e Campanhas' ? 'projects' : title === 'Eventos' ? 'events' : title === 'ROI' ? 'roi' : 'agency';
   return <><div className="section-title"><h2>{title}</h2><button className="link" onClick={() => navigate(id)}>Ver todos <ChevronRight size={12}/></button></div>
     <div className={`status-grid ${statuses.length <= 4 ? 'four' : ''}`}>{statuses.map((status, index) =>
-      <button key={status} className="status-card" style={{ '--status': ['#95b8ad', '#5cb7a6', '#6f9fcb', '#e1b56e', '#bc91b2', '#81b7a5'][index % 6] } as React.CSSProperties} onClick={() => navigate(id, status)} aria-label={`${title}: ${status}, ${counts?.[status] || 0}`}>
+      <button key={status} className="status-card" style={{ '--status': ['#d20000', '#e34242', '#ad0000', '#f07070', '#7f1d1d', '#c93636'][index % 6] } as React.CSSProperties} onClick={() => navigate(id, status)} aria-label={`${title}: ${status}, ${counts?.[status] || 0}`}>
         <div className="count">{counts?.[status] ?? 0}</div><div className="label">{status}</div>
       </button>)}</div></>;
 }
