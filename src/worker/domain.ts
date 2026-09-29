@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { parseCsv, roiPercent } from '../shared/logic';
+import { parseCsv, roiBalance, roiPercent, sumCents } from '../shared/logic';
+import { ROI_EXPENSE_CATEGORIES } from '../shared/types';
 import { getRecord, toRecord, touchRecordStatements, type RecordRow } from './db';
 import type { Env } from './env';
 
@@ -107,6 +108,53 @@ domainApi.patch('/stock/reservations/:id', async c => {
   const outcomes = await c.env.DB.batch([...statements, ...touchRecordStatements(c.env.DB, item)]);
   if (outcomes[0].meta.changes !== 1) return c.json({ error: 'Reserva já encerrada' }, 409);
   return c.json({ data: { id: reservation.id, status: body.status } });
+});
+
+type RoiLedgerRow = {
+  id: string;
+  entry_type: 'debit' | 'credit';
+  allocation: string | null;
+  expense_category: string | null;
+  company: string | null;
+  service: string | null;
+  client: string | null;
+  amount_cents: number;
+  occurred_on: string;
+  notes: string | null;
+  created_at: string;
+};
+
+const roiLedgerInput = z.discriminatedUnion('entryType', [
+  z.object({ entryType: z.literal('debit'), allocation: z.enum(['Equipe Netfive', 'Cliente X', 'Cliente Y']), expenseCategory: z.enum(ROI_EXPENSE_CATEGORIES), company: z.string().trim().min(1).max(200), amountCents: z.number().int().min(0), occurredOn: z.string().date(), notes: z.string().trim().max(1000).nullish() }),
+  z.object({ entryType: z.literal('credit'), service: z.string().trim().min(1).max(200), client: z.string().trim().min(1).max(200), amountCents: z.number().int().min(0), occurredOn: z.string().date(), notes: z.string().trim().max(1000).nullish() }),
+]);
+
+domainApi.get('/roi/ledger', async c => {
+  const rows = await c.env.DB.prepare(`SELECT id,entry_type,allocation,expense_category,company,service,client,amount_cents,occurred_on,notes,created_at
+    FROM roi_ledger_entries WHERE archived_at IS NULL ORDER BY occurred_on DESC, created_at DESC LIMIT 500`).all<RoiLedgerRow>();
+  const entries = rows.results;
+  const credits = sumCents(entries.filter(entry => entry.entry_type === 'credit').map(entry => entry.amount_cents));
+  const debits = sumCents(entries.filter(entry => entry.entry_type === 'debit').map(entry => entry.amount_cents));
+  return c.json({ data: { entries, totals: { credits, debits, balance: roiBalance(credits, debits) } } });
+});
+
+domainApi.post('/roi/ledger', async c => {
+  const parsed = roiLedgerInput.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: 'Lançamento de ROI inválido', details: parsed.error.flatten() }, 400);
+  const entry = parsed.data; const id = crypto.randomUUID(); const now = new Date().toISOString();
+  const statement = entry.entryType === 'debit'
+    ? c.env.DB.prepare(`INSERT INTO roi_ledger_entries (id,entry_type,allocation,expense_category,company,amount_cents,occurred_on,notes,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(id, 'debit', entry.allocation, entry.expenseCategory, entry.company, entry.amountCents, entry.occurredOn, entry.notes ?? null, now, now)
+    : c.env.DB.prepare(`INSERT INTO roi_ledger_entries (id,entry_type,service,client,amount_cents,occurred_on,notes,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).bind(id, 'credit', entry.service, entry.client, entry.amountCents, entry.occurredOn, entry.notes ?? null, now, now);
+  await statement.run();
+  return c.json({ data: { id, ...entry, createdAt: now } }, 201);
+});
+
+domainApi.delete('/roi/ledger/:id', async c => {
+  const result = await c.env.DB.prepare('UPDATE roi_ledger_entries SET archived_at=?, updated_at=? WHERE id=? AND archived_at IS NULL')
+    .bind(new Date().toISOString(), new Date().toISOString(), c.req.param('id')).run();
+  return result.meta.changes ? c.json({ data: { archived: true } }) : c.json({ error: 'Lançamento não encontrado' }, 404);
 });
 
 domainApi.get('/roi/summary', async c => {

@@ -36,17 +36,6 @@ async function configuredTemplate(db: D1Database, name: string): Promise<string[
   return Array.isArray(phases) && phases.every(v => typeof v === 'string') && phases.length
     ? phases as string[] : phaseTemplates[name] ?? phaseTemplates.Campanha;
 }
-const roiPhases = ['Pré-ROI', 'D+5', 'D+10', 'D+30', 'D+90', 'D+180'];
-
-function phaseDue(eventAt: string | null | undefined, phase: string): string | null {
-  if (!eventAt || phase === 'Pré-ROI') return null;
-  const days = Number(phase.slice(2));
-  const date = new Date(`${eventAt.slice(0, 10)}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 function routeKind(path: string): RecordKind | undefined { return routes[path]; }
 function cleanValue(value: unknown): string | null { return typeof value === 'string' && value.trim() ? value.trim() : null; }
 function validDate(value: string | null | undefined): boolean { return !value || !Number.isNaN(Date.parse(value)); }
@@ -89,9 +78,6 @@ for (const [route, kind] of Object.entries(routes)) {
         statements.push(c.env.DB.prepare('INSERT INTO project_phases (id, project_id, name, position) VALUES (?, ?, ?, ?)')
           .bind(crypto.randomUUID(), record.id, name, position));
     }
-    if (kind === 'event') for (const phase of roiPhases)
-      statements.push(c.env.DB.prepare('INSERT INTO roi_milestones (id, event_id, phase, due_at) VALUES (?, ?, ?, ?)')
-        .bind(crypto.randomUUID(), record.id, phase, phaseDue(record.eventAt, phase)));
     if (kind === 'stock_item') {
       const initialVariant = typeof input.data.initialVariant === 'string' && input.data.initialVariant.trim() ? input.data.initialVariant.trim() : 'Padrão';
       const variantId = crypto.randomUUID();
@@ -125,9 +111,6 @@ for (const [route, kind] of Object.entries(routes)) {
     };
     if (kind === 'task' && status === 'Concluído' && existing.status !== 'Concluído') updated.data.completedAt = updated.updatedAt;
     const statements = [updateRecordStatement(c.env.DB, updated, existing.version), outboxStatement(c.env.DB, updated)];
-    if (kind === 'event' && updated.eventAt !== existing.eventAt) for (const phase of roiPhases)
-      statements.push(c.env.DB.prepare('UPDATE roi_milestones SET due_at=? WHERE event_id=? AND phase=?')
-        .bind(phaseDue(updated.eventAt, phase), updated.id, phase));
     const results = await c.env.DB.batch(statements);
     if (results[0].meta.changes !== 1) return c.json({ error: 'Conflito de versão' }, 409);
     return c.json({ data: updated });
@@ -158,22 +141,4 @@ recordsApi.patch('/projects/:id/phases/:phaseId', async c => {
   const updated = { ...existing, data: { ...existing.data, progress }, version: existing.version + 1, updatedAt: new Date().toISOString() };
   await c.env.DB.batch([updateRecordStatement(c.env.DB, updated, existing.version), outboxStatement(c.env.DB, updated)]);
   return c.json({ data: { progress } });
-});
-recordsApi.get('/events/:id/milestones', async c => {
-  const result = await c.env.DB.prepare('SELECT * FROM roi_milestones WHERE event_id=? ORDER BY CASE phase WHEN \'Pré-ROI\' THEN 0 WHEN \'D+5\' THEN 1 WHEN \'D+10\' THEN 2 WHEN \'D+30\' THEN 3 WHEN \'D+90\' THEN 4 ELSE 5 END')
-    .bind(c.req.param('id')).all();
-  return c.json({ data: result.results });
-});
-recordsApi.patch('/events/:id/milestones/:phase', async c => {
-  const body = await c.req.json().catch(() => null) as { status?: string; notes?: string } | null;
-  if (!body || !['Pendente', 'Em andamento', 'Concluído'].includes(body.status ?? '')) return c.json({ error: 'Status inválido' }, 400);
-  const event = await getRecord(c.env.DB, 'event', c.req.param('id'));
-  if (!event) return c.json({ error: 'Evento não encontrado' }, 404);
-  const milestone = await c.env.DB.prepare('SELECT id FROM roi_milestones WHERE event_id=? AND phase=?')
-    .bind(event.id, c.req.param('phase')).first();
-  if (!milestone) return c.json({ error: 'Marco não encontrado' }, 404);
-  await c.env.DB.batch([c.env.DB.prepare('UPDATE roi_milestones SET status=?, notes=?, completed_at=? WHERE event_id=? AND phase=?')
-    .bind(body.status, body.notes ?? null, body.status === 'Concluído' ? new Date().toISOString() : null, event.id, c.req.param('phase')),
-    ...touchRecordStatements(c.env.DB, event)]);
-  return c.json({ data: { updated: true } });
 });

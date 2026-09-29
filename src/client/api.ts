@@ -16,6 +16,20 @@ export interface AppSettings {
   agencyUrl?: string;
   notionSources?: Record<string, string>;
 }
+export interface RoiLedgerEntry {
+  id: string;
+  entry_type: 'debit' | 'credit';
+  allocation?: string | null;
+  expense_category?: string | null;
+  company?: string | null;
+  service?: string | null;
+  client?: string | null;
+  amount_cents: number;
+  occurred_on: string;
+  notes?: string | null;
+  created_at: string;
+}
+export interface RoiLedgerData { entries: RoiLedgerEntry[]; totals: { credits: number; debits: number; balance: number } }
 
 let csrfToken = '';
 export function setCsrfToken(token?: string) { csrfToken = token || ''; }
@@ -41,6 +55,9 @@ export const api = {
   list: (resource: string) => request<MarketingRecord[]>(`/api/${resource}`),
   stock: <T>() => request<T[]>('/api/stock/items'),
   roiSummary: <T>() => request<T[]>('/api/roi/summary'),
+  roiLedger: () => request<RoiLedgerData>('/api/roi/ledger'),
+  addRoiLedgerEntry: (body: Record<string, unknown>) => request<RoiLedgerEntry>('/api/roi/ledger', { method: 'POST', body: JSON.stringify(body) }),
+  removeRoiLedgerEntry: (id: string) => request<unknown>(`/api/roi/ledger/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   opportunities: <T>(eventId: string) => request<T[]>(`/api/roi/opportunities?eventId=${encodeURIComponent(eventId)}`),
   addOpportunity: (body: Record<string, unknown>) => request<Record<string, unknown>>('/api/roi/opportunities', { method: 'POST', body: JSON.stringify(body) }),
   projectPhases: <T>(id: string) => request<T[]>(`/api/projects/${encodeURIComponent(id)}/phases`),

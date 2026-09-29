@@ -2,6 +2,20 @@ export function roiPercent(revenueCents: number, investmentCents: number): numbe
   return investmentCents > 0 ? ((revenueCents - investmentCents) / investmentCents) * 100 : null;
 }
 
+export function roiBalance(creditCents: number, debitCents: number): number {
+  return creditCents - debitCents;
+}
+
+export function sumCents(values: number[]): number {
+  return values.reduce((total, value) => total + value, 0);
+}
+
+export function totalsByKey(entries: Array<{ key: string; amountCents: number }>): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const entry of entries) totals[entry.key] = (totals[entry.key] ?? 0) + entry.amountCents;
+  return totals;
+}
+
 export function projectProgress(phases: Array<{ status: string }>): number {
   return phases.length ? Math.round(phases.filter(p => p.status === 'Concluído').length / phases.length * 100) : 0;
 }
