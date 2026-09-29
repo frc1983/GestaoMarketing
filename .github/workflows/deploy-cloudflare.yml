@@ -1,0 +1,96 @@
+name: Publicar no Cloudflare
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketing-os-production
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+      ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+      ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+    steps:
+      - id: check
+        name: Conferir bootstrap de produção
+        run: |
+          missing=()
+          for secret_name in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN CLOUDFLARE_D1_DATABASE_ID ADMIN_USERNAME ADMIN_PASSWORD_HASH SESSION_SECRET; do
+            if [ -z "${!secret_name:-}" ]; then missing+=("$secret_name"); fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "## Deploy aguardando configuração" >> "$GITHUB_STEP_SUMMARY"
+            echo "Cadastre estes GitHub Secrets: ${missing[*]}." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+  deploy:
+    # Enquanto o bootstrap não estiver concluído, o workflow não tenta publicar.
+    needs: bootstrap
+    if: ${{ needs.bootstrap.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://marketing-os-netfive.workers.dev
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+      ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+      ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+      SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      NOTION_TASKS_DATA_SOURCE_ID: ${{ secrets.NOTION_TASKS_DATA_SOURCE_ID }}
+      NOTION_PROJECTS_DATA_SOURCE_ID: ${{ secrets.NOTION_PROJECTS_DATA_SOURCE_ID }}
+      NOTION_EVENTS_DATA_SOURCE_ID: ${{ secrets.NOTION_EVENTS_DATA_SOURCE_ID }}
+      NOTION_ROI_DATA_SOURCE_ID: ${{ secrets.NOTION_ROI_DATA_SOURCE_ID }}
+      NOTION_STOCK_DATA_SOURCE_ID: ${{ secrets.NOTION_STOCK_DATA_SOURCE_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm test
+      - run: pnpm run build
+      - name: Gerar configuração de produção
+        run: node scripts/render-wrangler-config.mjs .wrangler.production.jsonc
+      - name: Sincronizar secrets obrigatórios do Worker
+        run: |
+          set -euo pipefail
+          for secret_name in ADMIN_USERNAME ADMIN_PASSWORD_HASH SESSION_SECRET; do
+            printf '%s' "${!secret_name}" | pnpm exec wrangler secret put "$secret_name" --config .wrangler.production.jsonc
+          done
+      - name: Sincronizar secrets opcionais do Notion
+        run: |
+          set -euo pipefail
+          for secret_name in NOTION_TOKEN NOTION_TASKS_DATA_SOURCE_ID NOTION_PROJECTS_DATA_SOURCE_ID NOTION_EVENTS_DATA_SOURCE_ID NOTION_ROI_DATA_SOURCE_ID NOTION_STOCK_DATA_SOURCE_ID; do
+            if [ -n "${!secret_name:-}" ]; then
+              printf '%s' "${!secret_name}" | pnpm exec wrangler secret put "$secret_name" --config .wrangler.production.jsonc
+            fi
+          done
+      - name: Aplicar migrações no D1
+        run: pnpm exec wrangler d1 migrations apply marketing-os --remote --config .wrangler.production.jsonc
+      - name: Publicar Worker
+        run: pnpm exec wrangler deploy --config .wrangler.production.jsonc

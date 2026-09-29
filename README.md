@@ -53,6 +53,23 @@ pnpm run deploy
 
 Na tela **Configurações**, informe os `data_source_id` das bases compartilhadas com a integração do Notion. O sistema cria a propriedade `Marketing OS ID` nessas bases para impedir páginas duplicadas. A importação inicial do Notion é permitida somente para **Tarefas**. Projetos, Eventos, ROI e Estoque são criados e mantidos no Marketing OS, com sincronização somente de saída para o Notion.
 
+## Publicação automática pelo GitHub Actions
+
+Os workflows em `.github/workflows` validam pull requests e publicam cada push na `master` no Worker `marketing-os-netfive`.
+
+Antes do primeiro deploy, crie na conta Cloudflare o banco D1 `marketing-os` e o bucket R2 `marketing-os-images`. Crie também um token de API limitado a essa conta, com permissão de edição para Workers e D1. A aplicação será publicada inicialmente em `https://marketing-os-netfive.workers.dev`.
+
+Cadastre os seguintes GitHub Actions secrets no repositório. Eles nunca devem ser gravados no código:
+
+- `CLOUDFLARE_ACCOUNT_ID`: `c47a1cc604a12cbe147b477a4e2f7f79`
+- `CLOUDFLARE_API_TOKEN`: token de deploy da Cloudflare
+- `CLOUDFLARE_D1_DATABASE_ID`: ID do banco D1 criado
+- `ADMIN_USERNAME`, `ADMIN_PASSWORD_HASH` e `SESSION_SECRET`: credenciais do Marketing OS
+
+O hash pode ser gerado localmente com `MARKETING_PASSWORD` definido e `pnpm run hash-password`. Gere `SESSION_SECRET` com ao menos 32 bytes aleatórios.
+
+Os secrets do Notion são opcionais: `NOTION_TOKEN`, `NOTION_TASKS_DATA_SOURCE_ID`, `NOTION_PROJECTS_DATA_SOURCE_ID`, `NOTION_EVENTS_DATA_SOURCE_ID`, `NOTION_ROI_DATA_SOURCE_ID` e `NOTION_STOCK_DATA_SOURCE_ID`. Quando existirem, o deploy os envia ao Worker. O workflow não publica enquanto os secrets obrigatórios não estiverem cadastrados.
+
 ## Estoque
 
 A importação aceita `.xlsx` com as colunas `Brinde`, `Tamanho`, `Quant.` e `Imagem`. A leitura ocorre no navegador, incluindo fotos incorporadas. Antes de confirmar, a interface mostra itens, variações, quantidades pendentes e a foto principal escolhida. O fingerprint do arquivo impede carga duplicada.
