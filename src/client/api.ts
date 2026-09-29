@@ -1,6 +1,6 @@
 import type { MarketingRecord } from '../shared/types';
 
-export interface Session { authenticated: boolean; csrfToken?: string; username?: string }
+export interface Session { authenticated: boolean; csrfToken?: string; username?: string; authenticationDisabled?: boolean }
 export interface DashboardData {
   statusCounts?: Record<string, Record<string, number>>;
   upcomingTasks?: MarketingRecord[];

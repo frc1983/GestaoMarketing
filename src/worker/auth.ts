@@ -5,6 +5,14 @@ import type { Env } from './env';
 type AppContext = Context<{ Bindings: Env; Variables: { csrfToken: string } }>;
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
+function isAuthenticationDisabled(env: Env): boolean {
+  return env.AUTH_DISABLED === 'true';
+}
+
+function bypassAuthentication(env: Env): boolean {
+  return isAuthenticationDisabled(env) || (env.APP_ENV === 'local' && env.DEV_AUTH_BYPASS === 'true');
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -52,9 +60,10 @@ async function currentSession(c: AppContext): Promise<{ csrf_token: string } | n
 }
 
 export async function requireAuth(c: AppContext, next: Next): Promise<Response | void> {
-  if (c.env.APP_ENV === 'local' && c.env.DEV_AUTH_BYPASS === 'true') {
-    c.set('csrfToken', 'local-dev-token');
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('X-CSRF-Token') !== 'local-dev-token')
+  if (bypassAuthentication(c.env)) {
+    const csrfToken = isAuthenticationDisabled(c.env) ? 'auth-disabled-token' : 'local-dev-token';
+    c.set('csrfToken', csrfToken);
+    if (!isAuthenticationDisabled(c.env) && !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) && c.req.header('X-CSRF-Token') !== csrfToken)
       return c.json({ error: 'Token CSRF inválido' }, 403);
     return next();
   }
@@ -67,8 +76,13 @@ export async function requireAuth(c: AppContext, next: Next): Promise<Response |
 }
 
 export async function getSession(c: AppContext): Promise<Response> {
-  if (c.env.APP_ENV === 'local' && c.env.DEV_AUTH_BYPASS === 'true')
-    return c.json({ data: { authenticated: true, username: 'Marketing', csrfToken: 'local-dev-token' } });
+  if (bypassAuthentication(c.env))
+    return c.json({ data: {
+      authenticated: true,
+      username: 'Marketing',
+      csrfToken: isAuthenticationDisabled(c.env) ? 'auth-disabled-token' : 'local-dev-token',
+      authenticationDisabled: isAuthenticationDisabled(c.env),
+    } });
   const session = await currentSession(c);
   return c.json({ data: session
     ? { authenticated: true, username: c.env.ADMIN_USERNAME ?? 'Marketing', csrfToken: session.csrf_token }
@@ -76,6 +90,8 @@ export async function getSession(c: AppContext): Promise<Response> {
 }
 
 export async function login(c: AppContext): Promise<Response> {
+  if (isAuthenticationDisabled(c.env))
+    return c.json({ data: { authenticated: true, username: 'Marketing', csrfToken: 'auth-disabled-token', authenticationDisabled: true } });
   if (!c.env.ADMIN_USERNAME || !c.env.ADMIN_PASSWORD_HASH || !c.env.SESSION_SECRET)
     return c.json({ error: 'Login ainda não configurado' }, 503);
   const input = await c.req.json().catch(() => null) as { username?: string; password?: string } | null;
@@ -96,6 +112,8 @@ export async function login(c: AppContext): Promise<Response> {
 }
 
 export async function logout(c: AppContext): Promise<Response> {
+  if (isAuthenticationDisabled(c.env))
+    return c.json({ data: { authenticated: true, username: 'Marketing', csrfToken: 'auth-disabled-token', authenticationDisabled: true } });
   const token = getCookie(c, 'marketing_session');
   if (token && c.env.SESSION_SECRET) await c.env.DB.prepare('DELETE FROM sessions WHERE id_hash=?')
     .bind(await sha256(`${c.env.SESSION_SECRET}:${token}`)).run();
