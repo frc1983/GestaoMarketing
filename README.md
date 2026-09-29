@@ -57,7 +57,7 @@ Na tela **Configurações**, informe os `data_source_id` das bases compartilhada
 
 Os workflows em `.github/workflows` validam pull requests e publicam cada push na `master` no Worker `marketing-os-netfive`.
 
-Antes do primeiro deploy, crie na conta Cloudflare o banco D1 `marketing-os` e o bucket R2 `marketing-os-images`. Crie também um token de API limitado a essa conta, com permissão de edição para Workers e D1. A aplicação será publicada inicialmente em `https://marketing-os-netfive.workers.dev`.
+Antes do primeiro deploy, crie na conta Cloudflare o banco D1 `marketing-os`. Crie também um token de API limitado a essa conta, com permissão de edição para Workers e D1. A aplicação será publicada inicialmente em `https://marketing-os-netfive.workers.dev`. O armazenamento de fotos do estoque via R2 será ativado em uma etapa posterior.
 
 Cadastre os seguintes GitHub Actions secrets no repositório. Eles nunca devem ser gravados no código:
 

@@ -26,9 +26,7 @@ async function stockRows(db: D1Database, itemId?: string) {
 domainApi.get('/stock/items', async c => {
   const items = await c.env.DB.prepare("SELECT * FROM records WHERE kind='stock_item' AND archived_at IS NULL ORDER BY title").all<RecordRow>();
   const variants = await stockRows(c.env.DB);
-  const photos = await c.env.DB.prepare('SELECT item_id,id FROM image_assets ORDER BY created_at').all<{ item_id: string; id: string }>();
-  return c.json({ data: items.results.map(row => ({ ...toRecord(row), variants: variants.filter(v => v.itemId === row.id),
-    imageUrl: photos.results.find(photo => photo.item_id === row.id) ? `/api/images/${photos.results.find(photo => photo.item_id === row.id)?.id}` : null })) });
+  return c.json({ data: items.results.map(row => ({ ...toRecord(row), variants: variants.filter(v => v.itemId === row.id) })) });
 });
 domainApi.get('/stock/items/:id/variants', async c => c.json({ data: await stockRows(c.env.DB, c.req.param('id')) }));
 domainApi.post('/stock/items/:id/variants', async c => {

@@ -90,7 +90,6 @@ async function detailText(env: Env, record: MarketingRecord): Promise<string> {
     detail.variants = (await env.DB.prepare('SELECT id,name,minimum FROM stock_variants WHERE item_id=?').bind(record.id).all()).results;
     detail.movements = (await env.DB.prepare('SELECT variant_id,quantity,reason,requester,event_id,client,created_at FROM stock_movements WHERE item_id=? ORDER BY created_at DESC LIMIT 100').bind(record.id).all()).results;
     detail.reservations = (await env.DB.prepare('SELECT variant_id,quantity,reason,requester,event_id,client,status FROM stock_reservations WHERE item_id=?').bind(record.id).all()).results;
-    detail.images = (await env.DB.prepare('SELECT id FROM image_assets WHERE item_id=?').bind(record.id).all()).results;
   }
   return JSON.stringify(detail);
 }

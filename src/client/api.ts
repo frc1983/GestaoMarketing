@@ -73,7 +73,6 @@ export const api = {
   retrySync: () => request<{ queued: boolean }>('/api/sync/retry', { method: 'POST', body: '{}' }),
   importStock: (fingerprint: string, items: Array<Record<string, unknown>>) => request<{ imported: number; items: Array<{ name: string; id: string }> }>('/api/import/stock', { method: 'POST', body: JSON.stringify({ fingerprint, items }) }),
   importRoiCsv: (csv: string) => request<Record<string, unknown>>('/api/import/roi-csv', { method: 'POST', body: JSON.stringify({ csv }) }),
-  uploadImage: (id: string, file: File) => request<Record<string, unknown>>(`/api/images/${encodeURIComponent(id)}`, { method: 'POST', headers: { 'Content-Type': file.type }, body: file }),
   stockMovement: (body: Record<string, unknown>) => request<Record<string, unknown>>('/api/stock/movements', { method: 'POST', body: JSON.stringify(body) }),
   stockReservation: (body: Record<string, unknown>) => request<Record<string, unknown>>('/api/stock/reservations', { method: 'POST', body: JSON.stringify(body) }),
   stockHistory: <T>(itemId: string) => request<T[]>(`/api/stock/movements?itemId=${encodeURIComponent(itemId)}`),

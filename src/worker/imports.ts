@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { getRecord, insertRecordStatement, outboxStatement, touchRecordStatements } from './db';
+import { insertRecordStatement, outboxStatement } from './db';
 import type { MarketingRecord } from '../shared/types';
 import type { Env } from './env';
 
@@ -41,31 +41,4 @@ importsApi.post('/import/stock', async c => {
   // The source workbook is small; a single D1 batch keeps the import all-or-nothing.
   await c.env.DB.batch(statements);
   return c.json({ data: { imported: items.length, items: items.map((item, i) => ({ name: item.name, id: created[i] })) } }, 201);
-});
-
-importsApi.post('/images/:itemId', async c => {
-  const itemId = c.req.param('itemId');
-  const item = await c.env.DB.prepare("SELECT id FROM records WHERE id=? AND kind='stock_item' AND archived_at IS NULL").bind(itemId).first();
-  if (!item) return c.json({ error: 'Item não encontrado' }, 404);
-  const type = c.req.header('Content-Type') ?? '';
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(type)) return c.json({ error: 'Use JPEG, PNG ou WebP' }, 415);
-  const bytes = await c.req.arrayBuffer();
-  if (bytes.byteLength > 5_000_000 || bytes.byteLength === 0) return c.json({ error: 'Imagem deve ter até 5 MB' }, 413);
-  const id = crypto.randomUUID();
-  const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
-  const key = `inventory/${itemId}/${id}.${ext}`;
-  await c.env.IMAGES.put(key, bytes, { httpMetadata: { contentType: type } });
-  const record = await getRecord(c.env.DB, 'stock_item', itemId);
-  if (!record) return c.json({ error: 'Item não encontrado' }, 404);
-  await c.env.DB.batch([c.env.DB.prepare('INSERT INTO image_assets (id,item_id,object_key,content_type,size,created_at) VALUES (?,?,?,?,?,?)')
-    .bind(id, itemId, key, type, bytes.byteLength, new Date().toISOString()), ...touchRecordStatements(c.env.DB, record)]);
-  return c.json({ data: { id, url: `/api/images/${id}` } }, 201);
-});
-importsApi.get('/images/:id', async c => {
-  const row = await c.env.DB.prepare('SELECT * FROM image_assets WHERE id=?').bind(c.req.param('id'))
-    .first<{ object_key: string; content_type: string }>();
-  if (!row) return c.json({ error: 'Imagem não encontrada' }, 404);
-  const image = await c.env.IMAGES.get(row.object_key);
-  if (!image) return c.json({ error: 'Imagem indisponível' }, 404);
-  return new Response(image.body, { headers: { 'Content-Type': row.content_type, 'Cache-Control': 'private, max-age=3600' } });
 });
