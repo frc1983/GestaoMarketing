@@ -81,27 +81,14 @@ export async function login(c: AppContext): Promise<Response> {
   const input = await c.req.json().catch(() => null) as { username?: string; password?: string } | null;
   if (!input || typeof input.username !== 'string' || typeof input.password !== 'string')
     return c.json({ error: 'Informe usuário e senha' }, 400);
-  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
-  const ipHash = await sha256(`${c.env.SESSION_SECRET}:${ip}`);
-  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  const attempts = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM login_attempts WHERE ip_hash=? AND attempted_at>?')
-    .bind(ipHash, since).first<{ count: number }>();
-  if ((attempts?.count ?? 0) >= 5) return c.json({ error: 'Muitas tentativas. Tente novamente em 15 minutos.' }, 429);
   const valid = input.username === c.env.ADMIN_USERNAME && await verifyPassword(input.password, c.env.ADMIN_PASSWORD_HASH);
-  if (!valid) {
-    await c.env.DB.prepare('INSERT INTO login_attempts (ip_hash, attempted_at) VALUES (?, ?)')
-      .bind(ipHash, new Date().toISOString()).run();
-    return c.json({ error: 'Usuário ou senha inválidos' }, 401);
-  }
+  if (!valid) return c.json({ error: 'Usuário ou senha inválidos' }, 401);
   const token = randomToken();
   const csrfToken = randomToken();
   const now = new Date();
-  await c.env.DB.batch([
-    c.env.DB.prepare('DELETE FROM login_attempts WHERE ip_hash=?').bind(ipHash),
-    c.env.DB.prepare('INSERT INTO sessions (id_hash, csrf_token, expires_at, created_at) VALUES (?, ?, ?, ?)')
-      .bind(await sha256(`${c.env.SESSION_SECRET}:${token}`), csrfToken,
-        new Date(now.getTime() + SESSION_SECONDS * 1000).toISOString(), now.toISOString()),
-  ]);
+  await c.env.DB.prepare('INSERT INTO sessions (id_hash, csrf_token, expires_at, created_at) VALUES (?, ?, ?, ?)')
+    .bind(await sha256(`${c.env.SESSION_SECRET}:${token}`), csrfToken,
+      new Date(now.getTime() + SESSION_SECONDS * 1000).toISOString(), now.toISOString()).run();
   setCookie(c, 'marketing_session', token, {
     httpOnly: true, secure: c.env.APP_ENV !== 'local', sameSite: 'Strict', path: '/', maxAge: SESSION_SECONDS,
   });
