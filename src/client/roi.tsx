@@ -7,6 +7,40 @@ const allocations = ['Equipe Netfive', 'Cliente X', 'Cliente Y'];
 const expenseCategories = ['Hospedagem', 'Passagem aérea', 'Transporte', 'Alimentação', 'Outros'];
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const dateLabel = (value: string) => new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR');
+const monthLabel = (value: string) => new Date(`${value}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '');
+
+interface TimelinePoint { month: string; credits: number; debits: number }
+
+function FinancialTimelineChart({ entries }: { entries: RoiLedgerEntry[] }) {
+  const points = useMemo(() => {
+    const grouped = new Map<string, TimelinePoint>();
+    for (const entry of entries) {
+      const month = entry.occurred_on.slice(0, 7);
+      const point = grouped.get(month) ?? { month, credits: 0, debits: 0 };
+      if (entry.entry_type === 'credit') point.credits += entry.amount_cents;
+      else point.debits += entry.amount_cents;
+      grouped.set(month, point);
+    }
+    return [...grouped.values()].sort((a, b) => a.month.localeCompare(b.month));
+  }, [entries]);
+  if (!points.length) return null;
+  const width = 760; const height = 260; const left = 54; const right = 18; const top = 24; const bottom = 42;
+  const chartWidth = width - left - right; const chartHeight = height - top - bottom;
+  const maximum = Math.max(...points.flatMap(point => [point.credits, point.debits]), 1);
+  const step = chartWidth / points.length; const barWidth = Math.min(22, Math.max(7, step * .28));
+  const currentMonth = new Date().toISOString().slice(0, 7); const futureStart = points.findIndex(point => point.month > currentMonth);
+  const labelInterval = Math.max(1, Math.ceil(points.length / 7));
+  const tickValues = [0, .5, 1].map(value => Math.round(maximum * value));
+  return <section className="card roi-chart" aria-label="Gráfico temporal de débitos e créditos">
+    <div className="roi-chart-head"><div><h2>Fluxo financeiro no tempo</h2><p>Débitos e créditos por mês, incluindo lançamentos futuros.</p></div><div className="roi-chart-legend"><span><i className="credit"/>Créditos</span><span><i className="debit"/>Débitos</span></div></div>
+    <div className="roi-chart-scroll"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Barras de créditos e débitos por mês">
+      {futureStart >= 0 && <><rect className="roi-chart-future" x={left + futureStart * step} y={top} width={chartWidth - futureStart * step} height={chartHeight}/><text className="roi-chart-future-label" x={left + futureStart * step + 7} y={top + 14}>Futuro</text></>}
+      {tickValues.map((value, index) => { const y = top + chartHeight - (value / maximum) * chartHeight; return <g key={value}><line className="roi-chart-grid" x1={left} x2={width - right} y1={y} y2={y}/><text className="roi-chart-axis" x={left - 8} y={y + 4} textAnchor="end">{money(value)}</text></g>; })}
+      {points.map((point, index) => { const center = left + index * step + step / 2; const creditHeight = point.credits / maximum * chartHeight; const debitHeight = point.debits / maximum * chartHeight; const showLabel = index % labelInterval === 0 || index === points.length - 1; return <g key={point.month}><rect className="roi-chart-bar credit" x={center - barWidth - 2} y={top + chartHeight - creditHeight} width={barWidth} height={creditHeight} rx="3"><title>{`${monthLabel(point.month)} · Créditos: ${money(point.credits)}`}</title></rect><rect className="roi-chart-bar debit" x={center + 2} y={top + chartHeight - debitHeight} width={barWidth} height={debitHeight} rx="3"><title>{`${monthLabel(point.month)} · Débitos: ${money(point.debits)}`}</title></rect>{showLabel && <text className="roi-chart-axis" x={center} y={height - 17} textAnchor="middle">{monthLabel(point.month)}</text>}</g>; })}
+      <line className="roi-chart-baseline" x1={left} x2={width - right} y1={top + chartHeight} y2={top + chartHeight}/>
+    </svg></div>
+  </section>;
+}
 
 function EntryForm({ type, onClose, onSaved }: { type: 'debit' | 'credit'; onClose: () => void; onSaved: () => void }) {
   const [allocation, setAllocation] = useState(allocations[0]); const [expenseCategory, setExpenseCategory] = useState(expenseCategories[0]);
@@ -48,6 +82,7 @@ export function RoiScreen({ initialStatus: _initialStatus = '' }: { initialStatu
   return <><div className="page-head"><div><div className="eyebrow">Financeiro</div><h1>ROI</h1><p>Controle de gastos, créditos recebidos e saldo acumulado.</p></div><div className="head-actions"><button className="secondary" onClick={() => setCreating('debit')}><ArrowDownCircle size={14}/> Novo gasto</button><button className="primary" onClick={() => setCreating('credit')}><ArrowUpCircle size={14}/> Novo ganho</button></div></div>
     {error && <div className="alert error">{error} <button className="link" onClick={refresh}>Tentar novamente</button></div>}
     <div className="metric-grid"><div className="card metric"><strong className="roi-credit">{money(totals.credits)}</strong><small>Créditos recebidos</small></div><div className="card metric"><strong className="roi-debit">{money(totals.debits)}</strong><small>Gastos registrados</small></div><div className="card metric"><strong className={totals.balance >= 0 ? 'roi-credit' : 'roi-debit'}>{money(totals.balance)}</strong><small>Saldo de ROI</small></div><div className="card metric"><strong>{data?.entries.length ?? 0}</strong><small>Lançamentos</small></div></div>
+    {data && <FinancialTimelineChart entries={data.entries}/>} 
     <div className="toolbar"><div className="segmented"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>Todos</button><button className={filter === 'debit' ? 'selected' : ''} onClick={() => setFilter('debit')}>Gastos</button><button className={filter === 'credit' ? 'selected' : ''} onClick={() => setFilter('credit')}>Ganhos</button></div></div>
     {!data && !error ? <div className="loading">Carregando ROI...</div> : entries.length === 0 ? <div className="card"><Empty title="Nenhum lançamento financeiro" body="Registre um gasto ou um ganho para acompanhar o saldo do ROI."/></div> : <div className="card table-wrap"><table className="data-table"><thead><tr><th>Tipo</th><th>Descrição</th><th>Empresa / Cliente</th><th>Responsável</th><th>Data</th><th>Valor</th><th/></tr></thead><tbody>{entries.map(entry => <EntryRow entry={entry} onRemove={remove} key={entry.id}/>)}</tbody></table></div>}
     {creating && <EntryForm type={creating} onClose={() => setCreating(null)} onSaved={refresh}/>}</>;
