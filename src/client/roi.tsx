@@ -8,6 +8,11 @@ const expenseCategories = ['Hospedagem', 'Passagem aérea', 'Transporte', 'Alime
 const money = (cents: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
 const dateLabel = (value: string) => new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('pt-BR');
 const monthLabel = (value: string) => new Date(`${value}-01T12:00:00`).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '');
+const inputDate = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+const currentMonthRange = () => {
+  const now = new Date();
+  return { start: inputDate(new Date(now.getFullYear(), now.getMonth(), 1)), end: inputDate(new Date(now.getFullYear(), now.getMonth() + 1, 0)) };
+};
 
 interface TimelinePoint { month: string; credits: number; debits: number }
 
@@ -73,7 +78,7 @@ function EntryRow({ entry, onRemove }: { entry: RoiLedgerEntry; onRemove: (entry
 }
 
 export function RoiScreen({ initialStatus: _initialStatus = '' }: { initialStatus?: string }) {
-  const [data, setData] = useState<RoiLedgerData | null>(null); const [error, setError] = useState(''); const [creating, setCreating] = useState<'debit' | 'credit' | null>(null); const [filter, setFilter] = useState<'all' | 'debit' | 'credit'>('all'); const [startDate, setStartDate] = useState(''); const [endDate, setEndDate] = useState('');
+  const [data, setData] = useState<RoiLedgerData | null>(null); const [error, setError] = useState(''); const [creating, setCreating] = useState<'debit' | 'credit' | null>(null); const [filter, setFilter] = useState<'all' | 'debit' | 'credit'>('all'); const [startDate, setStartDate] = useState(() => currentMonthRange().start); const [endDate, setEndDate] = useState(() => currentMonthRange().end);
   function refresh() { api.roiLedger().then(setData).catch(reason => setError(reason instanceof Error ? reason.message : 'Falha ao carregar o ROI.')); }
   useEffect(refresh, []);
   const dateEntries = useMemo(() => data?.entries.filter(item => (!startDate || item.occurred_on >= startDate) && (!endDate || item.occurred_on <= endDate)) ?? [], [data, startDate, endDate]);
@@ -85,7 +90,7 @@ export function RoiScreen({ initialStatus: _initialStatus = '' }: { initialStatu
     {error && <div className="alert error">{error} <button className="link" onClick={refresh}>Tentar novamente</button></div>}
     <div className="metric-grid"><div className="card metric"><strong className="roi-credit">{money(totals.credits)}</strong><small>Créditos recebidos</small></div><div className="card metric"><strong className="roi-debit">{money(totals.debits)}</strong><small>Gastos registrados</small></div><div className="card metric"><strong className={balance >= 0 ? 'roi-credit' : 'roi-debit'}>{money(balance)}</strong><small>Saldo de ROI</small></div><div className="card metric"><strong>{dateEntries.length}</strong><small>Lançamentos</small></div></div>
     {data && <FinancialTimelineChart entries={dateEntries}/>} 
-    <div className="toolbar"><div className="date-filter"><label>Início<input type="date" value={startDate} max={endDate || undefined} onChange={event => setStartDate(event.target.value)}/></label><label>Fim<input type="date" value={endDate} min={startDate || undefined} onChange={event => setEndDate(event.target.value)}/></label>{(startDate || endDate) && <button className="link" onClick={() => { setStartDate(''); setEndDate(''); }}>Limpar datas</button>}</div><div className="segmented"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>Todos</button><button className={filter === 'debit' ? 'selected' : ''} onClick={() => setFilter('debit')}>Gastos</button><button className={filter === 'credit' ? 'selected' : ''} onClick={() => setFilter('credit')}>Ganhos</button></div></div>
+    <div className="toolbar"><div className="date-filter"><label>Início<input type="date" value={startDate} max={endDate || undefined} onChange={event => setStartDate(event.target.value)}/></label><label>Fim<input type="date" value={endDate} min={startDate || undefined} onChange={event => setEndDate(event.target.value)}/></label><button className="link" onClick={() => { const range = currentMonthRange(); setStartDate(range.start); setEndDate(range.end); }}>Mês atual</button></div><div className="segmented"><button className={filter === 'all' ? 'selected' : ''} onClick={() => setFilter('all')}>Todos</button><button className={filter === 'debit' ? 'selected' : ''} onClick={() => setFilter('debit')}>Gastos</button><button className={filter === 'credit' ? 'selected' : ''} onClick={() => setFilter('credit')}>Ganhos</button></div></div>
     {!data && !error ? <div className="loading">Carregando ROI...</div> : entries.length === 0 ? <div className="card"><Empty title="Nenhum lançamento financeiro" body="Registre um gasto ou um ganho para acompanhar o saldo do ROI."/></div> : <div className="card table-wrap"><table className="data-table"><thead><tr><th>Tipo</th><th>Descrição</th><th>Empresa / Cliente</th><th>Responsável</th><th>Data</th><th>Valor</th><th/></tr></thead><tbody>{entries.map(entry => <EntryRow entry={entry} onRemove={remove} key={entry.id}/>)}</tbody></table></div>}
     {creating && <EntryForm type={creating} onClose={() => setCreating(null)} onSaved={refresh}/>}</>;
 }
