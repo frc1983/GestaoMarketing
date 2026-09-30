@@ -40,7 +40,7 @@ export async function verifyPassword(password: string, encoded: string): Promise
     if (!Number.isInteger(rounds) || rounds < 100_000 || rounds > 1_000_000) return false;
     const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
     const salt = base64ToBytes(saltText);
-    const actual = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salt.buffer.slice(salt.byteOffset, salt.byteOffset + salt.byteLength) as ArrayBuffer, iterations: rounds }, key, 256));
+    const actual = new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: salt as unknown as BufferSource, iterations: rounds }, key, 256));
     const expected = base64ToBytes(hashText);
     if (actual.length !== expected.length) return false;
     let difference = 0;
