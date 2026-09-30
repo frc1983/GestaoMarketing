@@ -34,7 +34,7 @@ function randomToken(): string {
 
 export async function verifyPassword(password: string, encoded: string): Promise<boolean> {
   try {
-    const [algorithm, roundsText, saltText, hashText] = encoded.split('$');
+    const [algorithm, roundsText, saltText, hashText] = encoded.trim().split('$');
     if (algorithm !== 'pbkdf2-sha256' || !roundsText || !saltText || !hashText) return false;
     const rounds = Number(roundsText);
     if (!Number.isInteger(rounds) || rounds < 100_000 || rounds > 1_000_000) return false;
@@ -97,7 +97,8 @@ export async function login(c: AppContext): Promise<Response> {
   const input = await c.req.json().catch(() => null) as { username?: string; password?: string } | null;
   if (!input || typeof input.username !== 'string' || typeof input.password !== 'string')
     return c.json({ error: 'Informe usuário e senha' }, 400);
-  const valid = input.username === c.env.ADMIN_USERNAME && await verifyPassword(input.password, c.env.ADMIN_PASSWORD_HASH);
+  const valid = input.username.trim() === c.env.ADMIN_USERNAME.trim()
+    && await verifyPassword(input.password, c.env.ADMIN_PASSWORD_HASH);
   if (!valid) return c.json({ error: 'Usuário ou senha inválidos' }, 401);
   const token = randomToken();
   const csrfToken = randomToken();
